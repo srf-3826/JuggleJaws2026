@@ -5,7 +5,7 @@
 package frc.robot.subsystems;
 
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
-
+import com.ctre.phoenix6.CANBus;
 import com.ctre.phoenix6.StatusCode;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.ClosedLoopRampsConfigs;
@@ -30,7 +30,6 @@ import frc.robot.Constants.*;
 import frc.robot.Utils.Utils;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-// import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 
 /**
  * The ball shooter subsystem uses PID to go to a given RPM, and when the setpoint
@@ -78,18 +77,18 @@ public class ShooterSubsystem extends SubsystemBase {
   // Declare a state variable, and start in the IDLE state.
   private int             m_shooterState = Shooter.IDLE;
 
+  private final CANBus            m_canBus;
   private final PowerDistribution m_pdp;
-  // private CommandXboxController   m_cmdXbox;
 
   /** Create a new ball shooter subsystem. */
-  public ShooterSubsystem(PowerDistribution pdp) {            // , CommandXboxController cmdXbox
+  public ShooterSubsystem(CANBus canBus, PowerDistribution pdp) {
+    m_canBus = canBus;
     m_pdp = pdp;
-    // m_cmdXbox = cmdXbox;
 
     m_feedMotor = new TalonSRX(Shooter.FEED_MOTOR_CTRL_CAN_ID);
     configFeedMotor();
   
-    m_launchMotor = new TalonFX(Shooter.LAUNCH_MOTOR_TALON_FX_CAN_ID, "rio");
+    m_launchMotor = new TalonFX(Shooter.LAUNCH_MOTOR_TALON_FX_CAN_ID, m_canBus);
     configLaunchMotor();
 
     m_launchStatorStatusSignal = m_launchMotor.getStatorCurrent();

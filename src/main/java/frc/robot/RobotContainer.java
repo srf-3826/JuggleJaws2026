@@ -8,6 +8,9 @@ import frc.robot.commands.DefaultDriveCmd;
 import frc.robot.commands.DefaultShooterCmd;
 import frc.robot.subsystems.DriveSubsystem;
 import frc.robot.subsystems.ShooterSubsystem;
+
+import com.ctre.phoenix6.CANBus;
+
 import edu.wpi.first.wpilibj.PowerDistribution;
 import edu.wpi.first.wpilibj.PowerDistribution.ModuleType;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
@@ -24,12 +27,13 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
  * subsystems, commands, and button mappings) should be declared here.
  */
 public class RobotContainer {
-  public final PowerDistribution m_pdp = new PowerDistribution(0, ModuleType.kCTRE);
-  public final CommandXboxController m_cmdXbox = new CommandXboxController(0);
+  private final PowerDistribution m_pdp = new PowerDistribution(0, ModuleType.kCTRE);
+  private final CommandXboxController m_cmdXbox = new CommandXboxController(0);
+  private final CANBus                m_canBus = new CANBus("rio");
 
   // The robot's subsystems and commands are defined here...
   private final DriveSubsystem m_drivetrain = new DriveSubsystem(m_pdp);
-  private final ShooterSubsystem m_shooter = new ShooterSubsystem(m_pdp);     // , m_cmdXbox
+  private final ShooterSubsystem m_shooter = new ShooterSubsystem(m_canBus, m_pdp);     // , m_cmdXbox
 
   private SendableChooser<String> m_driveEnableChooser = new SendableChooser<String>();
   
@@ -47,12 +51,9 @@ public class RobotContainer {
                               () -> m_cmdXbox.getRightY(),          // feed motor, + / - dir
                               m_shooter));
 
-<<<<<<< HEAD
     // Use sendableChooser on Dashboard to disable / enable differential driveBase
     // Allows general public to use game controller to launch balls without
     // risk of the robot moving.
-=======
->>>>>>> cd3b822ac266c7138887cf5c0bd89b39d4a96f98
     m_driveEnableChooser.setDefaultOption("Enabled", "Yes");
     m_driveEnableChooser.addOption("Disabled", "No");
     SmartDashboard.putData("Drive Disable", m_driveEnableChooser);
@@ -107,16 +108,12 @@ public class RobotContainer {
     // Connect the buttons to commands
     final Trigger ALT = m_cmdXbox.leftBumper();
 
-<<<<<<< HEAD
     // Activate and disable slow mode
-=======
->>>>>>> cd3b822ac266c7138887cf5c0bd89b39d4a96f98
     m_cmdXbox.rightBumper()
       .onTrue(new InstantCommand(()-> m_drivetrain.setMaxDriveOutput(0.4), m_drivetrain));
     m_cmdXbox.rightBumper()
       .onFalse(new InstantCommand(()-> m_drivetrain.setMaxDriveOutput(1.0), m_drivetrain));
 
-<<<<<<< HEAD
     // Launch single and continuous balls at fixed RPMs (from Constants.java)
     m_cmdXbox.y().and(ALT.negate()).onTrue(new InstantCommand(()->m_shooter.launchBallFixedRpm(false), m_shooter));
     ALT.and(m_cmdXbox.y()).onTrue(new InstantCommand(()->m_shooter.launchBallFixedRpm(true), m_shooter));
@@ -126,27 +123,15 @@ public class RobotContainer {
     ALT.and(m_cmdXbox.a()).onTrue(new InstantCommand(()-> m_shooter.launchBallVariableRpm(true), m_shooter));
 
     // Adjust vaariable RPMs for both Shooter and Feeder
-=======
-    m_cmdXbox.y().and(ALT.negate()).onTrue(new InstantCommand(()->m_shooter.launchBallFixedRpm(false), m_shooter));
-    ALT.and(m_cmdXbox.y()).onTrue(new InstantCommand(()->m_shooter.launchBallFixedRpm(true), m_shooter));
-    m_cmdXbox.a().and(ALT.negate()).onTrue(new InstantCommand(()-> m_shooter.launchBallVariableRpm(false), m_shooter));
-    ALT.and(m_cmdXbox.a()).onTrue(new InstantCommand(()-> m_shooter.launchBallVariableRpm(true), m_shooter));
-
->>>>>>> cd3b822ac266c7138887cf5c0bd89b39d4a96f98
     m_cmdXbox.povUp().onTrue(new InstantCommand(()-> m_shooter.increaseVariableLaunchRpm(), m_shooter));
     m_cmdXbox.povDown().onTrue(new InstantCommand(()-> m_shooter.decreaseVariableLaunchRpm(), m_shooter));
     m_cmdXbox.povRight().onTrue(new InstantCommand(()-> m_shooter.increaseVariableFeedSpeed(), m_shooter));
     m_cmdXbox.povRight().onTrue(new InstantCommand(()-> m_shooter.decreaseVariableFeedSpeed(), m_shooter));
 
-<<<<<<< HEAD
     // Start juggling. Will continue until stopped (X) or until a Launch mode (above) is initiated.
     m_cmdXbox.b().onTrue(new InstantCommand(()-> m_shooter.startJuggling(), m_shooter));
 
     // Stop whatever is active (Juggling or Launching)
-=======
-    m_cmdXbox.b().onTrue(new InstantCommand(()-> m_shooter.startJuggling(), m_shooter));
-
->>>>>>> cd3b822ac266c7138887cf5c0bd89b39d4a96f98
     m_cmdXbox.x().onTrue(new InstantCommand(()-> m_shooter.stopMotors(), m_shooter));
   }
 
