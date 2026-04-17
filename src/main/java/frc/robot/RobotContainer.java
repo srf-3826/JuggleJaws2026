@@ -64,7 +64,8 @@ public class RobotContainer {
   /**
    * Use configureButtonBindings to define your button->command mappings. 
    * CommandXboxController conveniently defines buttons as triggers; if needed use
-   * .getHID to revert to native nutton / joystick valuess.
+   * .getHID to revert to native button / joystick values, but beware: the HID
+   * inputs are not debounced.
    */
   private void configureButtonBindings() {
   //
@@ -133,6 +134,8 @@ public class RobotContainer {
 
     // Stop whatever is active (Juggling or Launching)
     m_cmdXbox.x().onTrue(new InstantCommand(()-> m_shooter.stopMotors(), m_shooter));
+
+    ALT.and(m_cmdXbox.back()).onTrue(new InstantCommand(()-> m_shooter.resetAllSpeeds()));
   }
 
   public boolean getDriveEnabled() {

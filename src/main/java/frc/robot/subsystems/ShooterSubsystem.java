@@ -7,7 +7,6 @@ package frc.robot.subsystems;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
 import com.ctre.phoenix6.CANBus;
 import com.ctre.phoenix6.StatusCode;
-import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.ClosedLoopRampsConfigs;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
@@ -19,12 +18,9 @@ import com.ctre.phoenix6.configs.VoltageConfigs;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.FeedbackSensorSourceValue;
-import com.ctre.phoenix6.signals.InvertedValue;
-import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix.motorcontrol.TalonSRXControlMode;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 
-import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.wpilibj.PowerDistribution;
 import frc.robot.Constants.*;
 import frc.robot.Utils.Utils;
@@ -39,20 +35,17 @@ public class ShooterSubsystem extends SubsystemBase {
   private TalonFX       m_launchMotor;
   private double        m_variableLaunchRpm = Shooter.WORKING_LAUNCH_RPM;     // default. Can be adjusted via Dpad up or down
   private double        m_measuredLaunchRpm;
-  private double        m_targetLaunchRpm = Shooter.WORKING_LAUNCH_RPM;       // Most recent requested launch speed
-  private double        m_juggleRpm = Shooter.JUGGLE_LAUNCH_RPM;
-  private double        m_statorLaunchCurrentDirect;
-  private double        m_statorLaunchCurrentIndirect;
-  private double        m_supplyLaunchCurrentDirect;
-  private double        m_supplyLaunchCurrentIndirect;
-  private double        m_supplyLaunchCurrentDirectBaseline = 0.0;
+  private double        m_targetLaunchRpm = 0.0;       // Most recent requested launch speed
+  private double        m_juggleRpm = Shooter.JUGGLE_LAUNCH_RPM;              // default. Can be adjusted via DPad in JUGGLING state.
+  private double        m_statorLaunchCurrent;
+  private double        m_supplyLaunchCurrent;
+  private double        m_supplyLaunchCurrentBaseline = 0.0;
   private double        m_pdpLaunchSupplyCurrent;
-  private StatusSignal<Current>  m_launchStatorStatusSignal;
-  private StatusSignal<Current>  m_launchSupplyStatusSignal;
 
   private TalonSRX      m_feedMotor;
-  private double        m_targetFeedSpeed = Shooter.WORKING_FEED_SPEED;
+  private double        m_targetFeedSpeed = 0.0;
   private double        m_variableFeedSpeed = Shooter.WORKING_FEED_SPEED;
+  private double        m_juggleFeedSpeed = Shooter.JUGGLE_FEED_SPEED;    // Default, Can be adjusted in JUGGLING state
   private double        m_avgMeasuredRpm = 0.0; 
  
   private boolean       m_continuousFlag = false;
@@ -80,7 +73,9 @@ public class ShooterSubsystem extends SubsystemBase {
   private final CANBus            m_canBus;
   private final PowerDistribution m_pdp;
 
-  /** Create a new ball shooter subsystem. */
+  //=============================
+  // ShooterSubsystem constructor
+  //=============================
   public ShooterSubsystem(CANBus canBus, PowerDistribution pdp) {
     m_canBus = canBus;
     m_pdp = pdp;
@@ -90,50 +85,50 @@ public class ShooterSubsystem extends SubsystemBase {
   
     m_launchMotor = new TalonFX(Shooter.LAUNCH_MOTOR_TALON_FX_CAN_ID, m_canBus);
     configLaunchMotor();
-
-    m_launchStatorStatusSignal = m_launchMotor.getStatorCurrent();
-    m_launchSupplyStatusSignal = m_launchMotor.getSupplyCurrent();
   }
 
-  // Feed is controlled by a TalonFRX (Phoenix 5 only)
+  //============================
+  // motor configuration methods
+  //============================
+
+  // Feed motor is controlled by a TalonFRX (requires Phoenix5)
   private void configFeedMotor() {
     m_feedMotor.configFactoryDefault();
     // m_feedMotor.configAllSettings(ctreConfigs.feedSRXConfig);
     m_feedMotor.configSupplyCurrentLimit(Shooter.feedSupplyLimit);
     m_feedMotor.setInverted(true);
     m_feedMotor.setNeutralMode(NeutralMode.Coast);
-    // TO DO: set current limits, soft limit switches
   } 
 
-  // Launch motor is a TaloxFX, which uses Phoenix 6
+  // Launch motor is a TaloxFX, which uses Phoenix6
   private void configLaunchMotor() {
-    var launchOutputConfig = new MotorOutputConfigs().withNeutralMode(NeutralModeValue.Coast)
-                                                     .withInverted(InvertedValue.CounterClockwise_Positive)
-                                                     .withPeakForwardDutyCycle(1.0)
-                                                     .withPeakReverseDutyCycle(-1.0);
-    var voltageConfig = new VoltageConfigs().withPeakForwardVoltage(8.5)      // ~ 4250 RPM
-                                            .withPeakReverseVoltage(-8.5);
+    var launchOutputConfig = new MotorOutputConfigs().withNeutralMode(Shooter.LAUNCH_MOTOR_NEUTRAL_MODE)
+                                                     .withInverted(Shooter.LAUNCH_MOTOR_INVERT)
+                                                     .withPeakForwardDutyCycle(Shooter.LAUNCH_PEAK_DUTY_CYCLE)
+                                                     .withPeakReverseDutyCycle(-Shooter.LAUNCH_PEAK_DUTY_CYCLE);
+    var voltageConfig = new VoltageConfigs().withPeakForwardVoltage(Shooter.LAUNCH_PEAK_VOLTAGE)
+                                            .withPeakReverseVoltage(-Shooter.LAUNCH_PEAK_VOLTAGE);
     var feedbackConfig = new FeedbackConfigs().withFeedbackSensorSource(FeedbackSensorSourceValue.RotorSensor)
                                               .withFeedbackRemoteSensorID(0)
-                                              .withSensorToMechanismRatio(1.0)    // No gear box - direct drive
-                                              .withRotorToSensorRatio(1.0);
-    var pid0Config = new Slot0Configs().withKP(0.2)
-                                       .withKI(0.0)
-                                       .withKD(0.0001)
-                                       .withKS(0.0)
-                                       .withKV(0.12)
-                                       .withKA(0.0)
-                                       .withKG(0.0);
-    var openLoopRampConfig = new OpenLoopRampsConfigs().withDutyCycleOpenLoopRampPeriod(0.25)
-                                                       .withVoltageOpenLoopRampPeriod(0.25)
+                                              .withSensorToMechanismRatio(Shooter.SENSOR_TO_MECHANISM_RATIO)
+                                              .withRotorToSensorRatio(Shooter.ROTOR_TO_SENSOR_RATIO);
+    var pid0Config = new Slot0Configs().withKP(Shooter.KP)
+                                       .withKI(Shooter.KI)
+                                       .withKD(Shooter.KD)
+                                       .withKS(Shooter.KS)
+                                       .withKV(Shooter.KV)
+                                       .withKA(Shooter.KA)
+                                       .withKG(Shooter.KG);
+    var openLoopRampConfig = new OpenLoopRampsConfigs().withDutyCycleOpenLoopRampPeriod(Shooter.LAUNCH_OPEN_LOOP_RAMP_PERIOD)
+                                                       .withVoltageOpenLoopRampPeriod(Shooter.LAUNCH_OPEN_LOOP_RAMP_PERIOD)
                                                        .withTorqueOpenLoopRampPeriod(0);
-    var closedLoopRampConfig = new ClosedLoopRampsConfigs().withDutyCycleClosedLoopRampPeriod(0.24)
-                                                           .withVoltageClosedLoopRampPeriod(0.25)
+    var closedLoopRampConfig = new ClosedLoopRampsConfigs().withDutyCycleClosedLoopRampPeriod(Shooter.LAUNCH_CLOSED_LOOP_RAMP_PERIOD)
+                                                           .withVoltageClosedLoopRampPeriod(Shooter.LAUNCH_CLOSED_LOOP_RAMP_PERIOD)
                                                            .withTorqueClosedLoopRampPeriod(0);
-    var currentLimitConfig = new CurrentLimitsConfigs().withSupplyCurrentLimit(30.0)
-                                                       .withSupplyCurrentLimitEnable(true)
-                                                       .withStatorCurrentLimit(40.0)
-                                                       .withStatorCurrentLimitEnable(true);
+    var currentLimitConfig = new CurrentLimitsConfigs().withSupplyCurrentLimit(Shooter.LAUNCH_SUPPLY_CURRENT_LIMIT)
+                                                       .withSupplyCurrentLimitEnable(Shooter.LAUNCH_ENABLE_SUPPLY_CURRENT_LIMIT)
+                                                       .withStatorCurrentLimit(Shooter.LAUNCH_STATOR_CURRENT_LIMIT)
+                                                       .withStatorCurrentLimitEnable(Shooter.LAUNCH_ENABLE_STATOR_CURRENT_LIMIT);
     var launchConfig = new TalonFXConfiguration().withMotorOutput(launchOutputConfig)
                                                  .withVoltage(voltageConfig)
                                                  .withFeedback(feedbackConfig)
@@ -148,6 +143,9 @@ public class ShooterSubsystem extends SubsystemBase {
     }
   }
 
+  //========================
+  // ShooterState management
+  //========================
   // changeState is a Utility routine that changes state, but also ensures a record is kept
   // showing all changes, including the immediately previous state.
   public void changeState(int newState) {
@@ -156,59 +154,85 @@ public class ShooterSubsystem extends SubsystemBase {
     m_shooterState = newState;
   }
 
-  // decreaseVariableLaunchRpm reduces m_launchRpm by 200 RPM, if the result will
-  // be equal to or greater than MIN_LAUNCH_RPM
+  //===================================================
+  // Routines to adjust variable Launch and Feed speeds
+  // Called via button bindings only
+  //===================================================
+  
+  // The following two methods allow on-the-fly adjustment of the launch speed.
+  //
+  // For regular lauching, adjust in 200 RPM increments, limiting the result
+  // to be between MIN_LAUNCH_RPM and MAX_LAUNCH_RPM, and do it wihtout any
+  // active motor control, i.e. defer that to the next Launch control button 
+  // (A, Y, Alt-A, or ALT-Y) press.
+  //
+  // For Juggling, adjust the currently active Launch RPM by just 100 and apply the 
+  // change immediately, and limit the max RPM to JUGGLE_LAUNCH_RPM, and the min RPM to 
+  // (JUGGLE_LAUNCH_RPM - 300). This allow fine tuning of the Juggle to reduce chances
+  // of the ball overshooting the basket during parades or other robot movements.
+  
   public void decreaseVariableLaunchRpm() {
     if (m_shooterState == Shooter.JUGGLING) {
-      // when JUGGLING, adjust the currently active Launch RPM by just 100 and apply the 
-      // change immediately, but limit the max RPM to JUGGLE_LAUNCH_RPM, and the min RPM to 
-      // (JUGGLE_LAUNCH_RPM - 300). This allow fine tuning of the Juggle to reduce chances
-      // of the ball overshooting the basket during parades or other robot movement while
-      // juggling.
-      if (m_juggleRpm == (Shooter.JUGGLE_LAUNCH_RPM)) {
+      if (m_juggleRpm >= (Shooter.JUGGLE_LAUNCH_RPM-200.0)) {
         m_juggleRpm -= 100.0;
         driveLaunchMotor(m_juggleRpm);
       }
-    } else {
-      // Regular launch 200 RPM adjustment - do in background, and do not apply to motor
-      // until a launch button (a, y, ALT-a, or ALT-y) is pressed.
-      if (m_variableLaunchRpm >= (Shooter.MIN_LAUNCH_RPM + 200.0)) {
-        m_variableLaunchRpm -= 200.0;
-      }
+    } else if (m_variableLaunchRpm >= (Shooter.MIN_LAUNCH_RPM + 200.0)) {
+      m_variableLaunchRpm -= 200.0;
     }
   }
 
- // increaseDefaultLaunchRpm increases m_defaultLaunchRpm by 200 RPM, if the result will
- // be equal to or less than MAX_LAUNCH_RPM
   public void increaseVariableLaunchRpm() {
     if (m_shooterState == Shooter.JUGGLING) {
-      if (m_juggleRpm == (Shooter.JUGGLE_LAUNCH_RPM - 100)) {
+      if (m_juggleRpm <= (Shooter.JUGGLE_LAUNCH_RPM - 100)) {
         m_juggleRpm += 100.0;
         driveLaunchMotor(m_juggleRpm);
       }
-    } else {      
-    }
-    if (m_variableLaunchRpm <= Shooter.MAX_LAUNCH_RPM - 200.0) {
+    } else if (m_variableLaunchRpm <= Shooter.MAX_LAUNCH_RPM - 200.0) {
       m_variableLaunchRpm += 200.0;
     }
   }
 
-  public double getTargetLaunchSpeed() {
-    return m_targetLaunchRpm;
-  }
+  // The following two methods adjust the variableFeedSpeed in increments of
+  // .2, keeping the speed within the range MIN_FEED_SPEED (.3) and MAX_FEED_SPEEED (1.0),
+  // OR, if in JUGGLING state, adjust the m_jugglingFeedSpeed in increments of
+  // 0.1, keeping within the range JUGGLE_FEED_SPEED - .3 and JUGGLE_FEED_SPEED + 0.1
 
   public void decreaseVariableFeedSpeed() {
-    if (m_variableFeedSpeed >= (Shooter.MIN_FEED_SPEED + 0.2)) {
+    if (m_shooterState == Shooter.JUGGLING) {
+      if (m_juggleFeedSpeed >= Shooter.JUGGLE_FEED_SPEED - 0.2) {
+        m_juggleFeedSpeed -= 0.1;
+      }
+    } else if (m_variableFeedSpeed >= (Shooter.MIN_FEED_SPEED + 0.2)) {
       m_variableFeedSpeed -= 0.2;
     }
   }
 
   public void increaseVariableFeedSpeed() {
-    if (m_variableFeedSpeed <= (Shooter.MAX_FEED_SPEED - 0.2)) {
+    if (m_shooterState == Shooter.JUGGLING) {
+      if (m_juggleFeedSpeed <= Shooter.JUGGLE_FEED_SPEED) {
+        m_juggleFeedSpeed += 0.1;
+      }
+    } else if (m_variableFeedSpeed <= (Shooter.MAX_FEED_SPEED - 0.2)) {
       m_variableFeedSpeed += 0.2;
     }
   }
+
+  public void resetAllSpeeds() {
+    m_variableLaunchRpm = Shooter.WORKING_LAUNCH_RPM;
+    m_variableFeedSpeed = Shooter.WORKING_FEED_SPEED;
+    m_juggleRpm = Shooter.JUGGLE_LAUNCH_RPM;
+    m_juggleFeedSpeed = Shooter.JUGGLE_FEED_SPEED;
+  }
   
+  //======================================================================================
+  // Getters for targetLaunchSpeed, targeetFeedSpeed, Shooter State, and Shooter motor RPM
+  //======================================================================================
+
+  public double getTargetLaunchSpeed() {
+    return m_targetLaunchRpm;
+  }
+
   public double getTargetFeedSpeed() {
     return m_targetFeedSpeed;
   }
@@ -218,12 +242,41 @@ public class ShooterSubsystem extends SubsystemBase {
   }
 
   // getLaunchMotorRpm returns the current RPM of the launch motor.
-  // It reads the internal encoder (which returns units of countsd per 100 ms)
-  // and converts that to RPM to be returned
+  // It reads the internal encoder (which in Phoenix6 returns units rps)
+  // and converts that to RPM, which is the value returned
   public double getLaunchMotorRpm() {
     return Utils.convertRpsToRpm(m_launchMotor.getVelocity().getValueAsDouble());
   }
 
+  //================================================================
+  // methods to support buttom presses which control launching balls
+  //================================================================
+
+  // A WORD ABOUT SPEEDS AND PROGRAM LOGIC:
+  // There are essentially 4 speeds stored or tracked:
+  // WORKING_LAUNCH_RPM and WORKING_FEED_SPEED are pre-set constant speeds
+  // JUGGLE_LAUNCH_RPM and JUGGLE_FEED_SPEED and also pre-set constants speeds
+  // but that only apply during juggling.
+  // Both of these seed variables holding adjustable speeds, for which
+  // m_variableLaunchRpm and m_variableFeedSpeed are bound to the Y button for
+  // lauching balls at those variable speeds, and the fixed WORKING_LAUNCH_RPM and 
+  // WORKING_FEED_SPEED are bound to the A button for launching balls at fixed speeds.
+  // For juggling, the (possibly adjusted) m_juggleRpm and m_juggleFeedSpeed are
+  // always using when entering the JUGGLE State.
+  //
+  // m_targetLaunchRpm and m_targetFeedSpeed, regardless of State, are stored speeds 
+  // last set by any motor controller directive. For deferred ball launch actions 
+  // (waiting for shooter to come to speed, for example) it is necessary that 
+  // m_targetFeedSpeed be set beforehand (this is usually not set until the motor "drive" 
+  // method is called), so that the state maachine when ready can start the feed motor at 
+  // the desired speed (either FIXED or variable). 
+  // The point being that the state machine will always use the m_targetxxx speeds when 
+  // ball launching is ready. Juggling will always use its own speeds when ready.
+  // Also, the current target speeds (regardless of state) are always available to be stored
+  // before any defaultShooterCmd overrides are applied. Then they can be restored (by calling 
+  // the respective motor "drive" method with the stored speeds) whenever such overrides are 
+  // no longer present.
+  
   public void launchBallVariableRpm(boolean continuousFlag) {                    // a or ALT-a (ALT = continuous)
     launchBall(m_variableLaunchRpm, m_variableFeedSpeed, continuousFlag);
   }
@@ -232,30 +285,30 @@ public class ShooterSubsystem extends SubsystemBase {
     launchBall(Shooter.WORKING_LAUNCH_RPM, Shooter.WORKING_FEED_SPEED, continuousFlag);
   }
 
-  // launchBall changes to a ball launch mode, either with a feed timeout, or continuous.
-  // It is allowed in any state, even JUGGLING or CHANGING_RPM, as well as LAUNCHING (because
-  // launch speed or feed speed may change).
-  // This is a "start the process" routine, setting state and sending motor controller instructions
-  // to change speed(s). The periodic() method must take over after the target RPM is reached 
-  // in order to start the feed motor which will move a ball into contact with the shooter wheels.
-  // periodic() will also stop the feed motor when the ball is considered to have been launched, 
-  // based on the shooter moter experiencing a supply or stator current spike, or via a timeot,
-  // unless the continuousFlag is set, in which case the mode will run until canceled.
+  // launchBall is the central method to initiate ball launching, either with a timeout to limit 
+  // the number of balls launched, or alternatively using current sensing to stop after launching
+  // just one ball) or continuous (no limits on how many balls to launch, not stopping until
+  // and appropriate button press (i.e., X)).
+  // It is allowed to be called in any state, even JUGGLING or CHANGING_RPM, as well as LAUNCHING 
+  // (because launch and feed speeds are allowed to change), but it is only called from 
+  // one of the nmethods just above, either launchBallVariableRpm or launchBallFixedRpm. 
+  // This method sets the appropriate state and sends motor controller closed loop directives
+  // to change speed(s). The periodic() method must take over while waiting for the launch motor
+  // target RPM to be reached, after which the feed motor will be started to move ball(s) into 
+  // contact with the shooter wheels.
+  // periodic() will also stop the feed motor when it is desired to shoot just one ball (or a limited 
+  // number of balls) based on the consumed amperage (shooter moter supply or stator, or PDP slot, any or
+  // all), or via a timeot. If the continuousFlag is set, the launching will run until canceled.
   //
-  public void launchBall(double launchRpm, double feedSpeed, boolean continuousFlag) {
+  private void launchBall(double launchRpm, double feedSpeed, boolean continuousFlag) {
     m_continuousFlag = continuousFlag;
     if ((m_shooterState == Shooter.LAUNCHING) || (m_shooterState == Shooter.READY_TO_LAUNCH)) {
-      if (feedSpeed != m_targetFeedSpeed) {
-        m_targetFeedSpeed = feedSpeed;    // might remain applied now, or suppressed until RPM is reached
-        startFeedMotor(feedSpeed);
-      }
-      if (launchRpm == m_targetLaunchRpm) {
-        startFeedMotor(feedSpeed);
-        changeState(Shooter.LAUNCHING);
-        return;
-      }
+      startFeedMotor(feedSpeed);
+      changeState(Shooter.LAUNCHING);
+      return;
     }
     stopFeedMotor();
+    m_targetFeedSpeed = feedSpeed;
     changeState(Shooter.CHANGING_RPM_TO_LAUNCH);
     startLaunchMotor(launchRpm);
   }
@@ -276,7 +329,8 @@ public class ShooterSubsystem extends SubsystemBase {
     startLaunchMotor(m_juggleRpm);
   }
 
-  // This method is called from defaultShooterCmd, or for juggling.
+  // This method is called from defaultShooterCmd, or from startFeedMotor,
+  // or per loop while juggling.
   public void driveFeedMotor(double feedSpeed) {
     m_targetFeedSpeed = feedSpeed;
     m_feedMotor.set(TalonSRXControlMode.PercentOutput, feedSpeed);
@@ -298,15 +352,24 @@ public class ShooterSubsystem extends SubsystemBase {
     m_feedMotor.set(TalonSRXControlMode.PercentOutput, 0.0);
   }
 
+  // driveLaunchMotor starts the launch motor with no timeout (if timeout needed, set it
+  // before or after calling this method). If the specified rpm is 0 or negative,
+  // stop the motor. Always set the targetLaunchRpm to the requested speed.
    public void driveLaunchMotor(double rpm) {
-    if (rpm <= 0.0) {
-      stopLaunchMotor();
-      return;
-    } 
     m_targetLaunchRpm = rpm;
-    m_launchMotor.setControl(m_velocityVoltageRequest.withVelocity(Utils.convertRpmToRps(rpm)));
+    if (rpm <= 0.0) {
+      m_targetLaunchRpm = 0.0;
+      m_launchMotor.stopMotor();
+      if (m_shooterState != Shooter.IDLE) {
+        changeState(Shooter.IDLE);
+      }
+    } else {
+      m_launchMotor.setControl(m_velocityVoltageRequest.withVelocity(Utils.convertRpmToRps(rpm)));
+    }
   }
-      
+
+  // startLaunchMotor essentially replicates driveLaunchMotor except it also sets a start time
+  // and reports the requested rpm speed.
   public void startLaunchMotor(double rpm) {
     m_launcherStartTimeMs = System.currentTimeMillis();
     System.out.println("Starting Launch Motor at "+rpm+" rpm");
@@ -314,12 +377,7 @@ public class ShooterSubsystem extends SubsystemBase {
   }
 
   public void stopLaunchMotor() {
-    m_targetLaunchRpm = 0.0;
-    m_launchMotor.stopMotor();
-    // force IDLE if not already there.
-    if (m_shooterState != Shooter.IDLE) {
-      changeState(Shooter.IDLE);
-    }
+    driveLaunchMotor(0.0);
   }
 
   // Utility routine to stop motors manually (and return to IDLE state)
@@ -334,10 +392,8 @@ public class ShooterSubsystem extends SubsystemBase {
   public void periodic() {
     m_measuredLaunchRpm = getLaunchMotorRpm();
     m_avgMeasuredRpm = m_measuredLaunchRpm * 0.2 + m_avgMeasuredRpm * 0.8;
-    m_statorLaunchCurrentDirect = m_launchMotor.getStatorCurrent().getValueAsDouble();
-    m_supplyLaunchCurrentDirect = m_launchMotor.getSupplyCurrent().getValueAsDouble();
-    m_statorLaunchCurrentIndirect = m_launchStatorStatusSignal.refresh().getValueAsDouble();
-    m_supplyLaunchCurrentIndirect = m_launchSupplyStatusSignal.refresh().getValueAsDouble();
+    m_statorLaunchCurrent = m_launchMotor.getStatorCurrent().getValueAsDouble();
+    m_supplyLaunchCurrent = m_launchMotor.getSupplyCurrent().getValueAsDouble();
     m_pdpLaunchSupplyCurrent = m_pdp.getCurrent(Shooter.LAUNCH_MOTOR_PDP_SLOT);
     
     m_timeMs = System.currentTimeMillis();
@@ -345,8 +401,9 @@ public class ShooterSubsystem extends SubsystemBase {
     m_elapsedLaunchTimeMs = m_timeMs - m_feederStartTimeMs;
 
     /** Call log method every loop to keep Dashboard data current */
-    log();
+    publishShooterData();
 
+    // Run the shooter state machine
     switch (m_shooterState) {
       case Shooter.IDLE:
       case Shooter.READY_TO_LAUNCH:
@@ -360,14 +417,14 @@ public class ShooterSubsystem extends SubsystemBase {
           SmartDashboard.putNumber("MS to reach RPM = ", m_elapsedSpinUpTimeMs);
           if (m_shooterState == Shooter.CHANGING_RPM_TO_LAUNCH) {
             changeState(Shooter.LAUNCHING);
+            // reset baselines to current values at time lauch is triggered
             m_avgMeasuredRpm = m_measuredLaunchRpm;
-            m_feederStartTimeMs = m_timeMs;
-            m_supplyLaunchCurrentDirectBaseline = m_supplyLaunchCurrentDirect;
+            m_supplyLaunchCurrentBaseline = m_supplyLaunchCurrent;
             SmartDashboard.putNumber("Starting FeedMotor for launch", m_targetFeedSpeed);
             startFeedMotor(m_targetFeedSpeed);
           } else {
             changeState(Shooter.JUGGLING);
-            startFeedMotor(Shooter.JUGGLE_FEED_SPEED);
+            startFeedMotor(m_juggleFeedSpeed);
           }
         }
         break;
@@ -379,7 +436,7 @@ public class ShooterSubsystem extends SubsystemBase {
         // Not in continuous launch mode, so check if feeder (and maybe launcher) should be stopped
         System.out.println("Current RPM = "+m_measuredLaunchRpm);
         if ((m_avgMeasuredRpm - m_measuredLaunchRpm) >= (m_targetLaunchRpm*0.03)) {
-          if ((m_supplyLaunchCurrentDirect - m_supplyLaunchCurrentDirectBaseline) >= Shooter.LAUNCH_DETECTION_CURRENT_THRESHOLD) {
+          if ((m_supplyLaunchCurrent - m_supplyLaunchCurrentBaseline) >= Shooter.LAUNCH_DETECTION_CURRENT_THRESHOLD) {
             // A spike in supply current means the ball has encountered the launch wheels
             stopFeedMotor();  // the feed motor can be restarted for repetitive shots 
                               // as an option since the shooter motor is left at the last RPM.
@@ -395,7 +452,7 @@ public class ShooterSubsystem extends SubsystemBase {
         break;
 
       case Shooter.JUGGLING:
-        driveFeedMotor(Shooter.WORKING_FEED_SPEED);
+        driveFeedMotor(m_juggleFeedSpeed);
         break;
 
       default:
@@ -407,17 +464,18 @@ public class ShooterSubsystem extends SubsystemBase {
   }
 
   // The log method puts interesting information to the SmartDashboard.
-  public void log() {
+  public void publishShooterData() {
     SmartDashboard.putNumber("Var Launch RPM: ", m_variableLaunchRpm);
+    SmartDashboard.putNumber("Var Feed Speed: ", m_variableFeedSpeed);
     SmartDashboard.putNumber("Var Juggle RPM: ", m_juggleRpm);
+    SmartDashboard.putNumber("Var Juggle Feed Speed: ", m_juggleFeedSpeed);
     SmartDashboard.putNumber("Target RPM: ", m_targetLaunchRpm);
-    SmartDashboard.putNumber("Current RPM: ", m_measuredLaunchRpm);
-    SmartDashboard.putNumber("Supply Amps Direct: ", m_supplyLaunchCurrentDirect);
-    SmartDashboard.putNumber("Supply Amps Indirect: ", m_supplyLaunchCurrentIndirect);
-    SmartDashboard.putNumber("Stator Amps Direct: ", m_statorLaunchCurrentDirect);
-    SmartDashboard.putNumber("Stator Amps Indirect: ", m_statorLaunchCurrentIndirect);
+    SmartDashboard.putNumber("Target Feed speed: ", m_targetFeedSpeed);
+    SmartDashboard.putNumber("Measured RPM: ", m_measuredLaunchRpm);
+    SmartDashboard.putNumber("Supply Amps: ", m_supplyLaunchCurrent);
+    SmartDashboard.putNumber("Stator Amps: ", m_statorLaunchCurrent);
     SmartDashboard.putNumber("PDP Supply Amps: ", m_pdpLaunchSupplyCurrent);
-    SmartDashboard.putNumber("Variable Feed: ", m_variableFeedSpeed);
-    SmartDashboard.putNumber("Target Feed: ", m_targetFeedSpeed);
+
+
   }
 }

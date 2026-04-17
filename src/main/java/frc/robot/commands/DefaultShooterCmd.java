@@ -11,11 +11,6 @@ import frc.robot.Constants.Shooter;
 import frc.robot.Constants.UI;
 import frc.robot.subsystems.ShooterSubsystem;
 
-/**
- * Move the wrist to a given angle. This command finishes when it is within the tolerance, but
- * leaves the PID loop running to maintain the position. Other commands using the wrist should make
- * sure they disable PID!
- */
 public class DefaultShooterCmd extends Command {
   private final ShooterSubsystem m_shooter;
   private final DoubleSupplier m_launchSpeedSupplier;
@@ -71,12 +66,16 @@ public class DefaultShooterCmd extends Command {
       m_launchSpeed = 0.0;
     }
 
-    // For both Feed speed and Launch speed, but processed independently,
+    // Because JuggleJaws can be set to fire at various shooter and feed speeds,
+    // wether single shot or continuously, then having manual joystick drive available
+    // means we need to treat it aas an override, and return to the previously set
+    // values when the joysticks  are released.
+    // Thus for both Feed speed and Launch speed, but processed independently,
     // when the respective axis value is non zero, and the override flag is 
     // not set, then set it and store the current motor speed. If the override
-    // flag is set, then drive the respective motor at the scaled axis value.
-    // When the respective axis value is 0.0, do not drive the motor but instead
-    // check if the override flag is set. If so, just clear it and restore the 
+    // flag is set, then continue driving the respective motor at the manual Joystick value.
+    // When the respective axis value returns to 0.0 (i.e. below the deadband), then
+    // check if the override flag is set. If so, clear it and restore the 
     // respective motor speed to the prior stored value and exit.
     if (Math.abs(m_feedSpeed) > UI.JOYSTICK_DEADBAND) {
       if (! m_feedSpeedOverrideActive) {

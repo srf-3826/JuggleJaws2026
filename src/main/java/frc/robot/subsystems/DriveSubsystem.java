@@ -95,7 +95,12 @@ public class DriveSubsystem extends SubsystemBase {
 
   // If the driveEnable sendable chooser in SmartDashboard is switched (whether to disaabled, 
   // or to enabled) the following two support methods (called from defaultDriveCmd) ensure 
-  // that drive motors safety is set to match the current choice.
+  // that drive motors' WPILib timeout safety enabled is set to match the current choice.
+  // Toggling this safety is overkill, since with disabled drive the DefaultDriveCmd still
+  // sends drive commands every loop - just with null joystick input values, so for
+  // safety purposes the feed() method required by the WPILib safety is teill being satisfied.
+  // Still, it's a nice exercise for the student if they wanted to stop calling drive()
+  // when drive is selected as disabled.
   public void enableDriveSafety() {
     m_drive.setSafetyEnabled(true);
   }

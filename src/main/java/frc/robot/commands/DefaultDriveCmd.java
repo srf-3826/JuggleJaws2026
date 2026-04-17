@@ -16,12 +16,12 @@ import java.util.function.DoubleSupplier;
  */
 public class DefaultDriveCmd extends Command {
   private final DriveSubsystem m_drivetrain;
-  private final BooleanSupplier m_driveEnabledSource;
   private final DoubleSupplier m_speedSource;
-  private final DoubleSupplier m_rotateSource  ;
-  private       boolean        m_driveSafetyIsEnabled = true;
+  private final DoubleSupplier m_rotateSource;
+  private final BooleanSupplier m_driveEnabledSource;
   private       double         m_speedInput;
   private       double         m_rotateInput;
+  private       boolean        m_driveSafetyIsEnabled = true;
 
   /**
    * Creates a new ArcadeDrive command.
@@ -34,10 +34,10 @@ public class DefaultDriveCmd extends Command {
                          DoubleSupplier rotate,
                          BooleanSupplier driveEnabled, 
                          DriveSubsystem drivetrain) {
-    m_drivetrain = drivetrain;
     m_speedSource = speed;
     m_rotateSource = rotate;
     m_driveEnabledSource = driveEnabled;
+    m_drivetrain = drivetrain;
     addRequirements(m_drivetrain);
   }
 
@@ -45,19 +45,25 @@ public class DefaultDriveCmd extends Command {
   @Override
   public void execute() {
     if (m_driveEnabledSource.getAsBoolean()) {
+      // Sendable chooser DriveEnabled has been switched to "Yes"
+      // If motor timeout safety has previously been disabled, enable it now
       if (! m_driveSafetyIsEnabled) {
         m_drivetrain.enableDriveSafety();
         m_driveSafetyIsEnabled = true;
       }
+      // and read actual joystick drive commands to send to the Drive subsystem
       m_speedInput = m_speedSource.getAsDouble();
       m_rotateInput = m_rotateSource.getAsDouble();
     } else {
+      // Sendable Chooser Drive Enabled has been set to "No"
+      // If motor timeout safety is currently enabled, turn it off
       if (m_driveSafetyIsEnabled) {
         m_drivetrain.disableDriveSafety();
         m_driveSafetyIsEnabled = false;
-        m_speedInput = 0.0;
-        m_rotateInput = 0.0;
       }
+      // simulate null joystick input to send to the Drive Subsystem
+      m_speedInput = 0.0;
+      m_rotateInput = 0.0;
     }
     m_drivetrain.drive(m_speedInput, m_rotateInput);
   }

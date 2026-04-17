@@ -5,6 +5,8 @@
 package frc.robot;
 
 import com.ctre.phoenix.motorcontrol.SupplyCurrentLimitConfiguration;
+import com.ctre.phoenix6.signals.InvertedValue;
+import com.ctre.phoenix6.signals.NeutralModeValue;
 
 /** Add your docs here. */
 public class Constants {
@@ -46,6 +48,21 @@ public class Constants {
                                                                             // Phoenix6 closed loop Velocity PID control, 
                                                                             // normally with fixed input, but manual joystick 
                                                                             // scaled input avail for variable operator control
+        public static final NeutralModeValue LAUNCH_MOTOR_NEUTRAL_MODE = NeutralModeValue.Coast;
+        public static final InvertedValue LAUNCH_MOTOR_INVERT = InvertedValue.Clockwise_Positive;  // was CounterClockwise_Positive.
+        public static final double LAUNCH_PEAK_DUTY_CYCLE = 1.0;
+        public static final double LAUNCH_PEAK_VOLTAGE = 8.5;               // ~ 4250 RPM
+        public static final double ROTOR_TO_SENSOR_RATIO = 1.0;
+        public static final double SENSOR_TO_MECHANISM_RATIO = 15 / 18;
+        public static final double LAUNCH_OPEN_LOOP_RAMP_PERIOD = 0.25;
+        public static final double LAUNCH_CLOSED_LOOP_RAMP_PERIOD = 0.25;
+        public static final double LAUNCH_SUPPLY_CURRENT_LIMIT = 30;
+        public static final double LAUNCH_SUPPLY_CURRENT_THRESHOLD = 45;
+        public static final double LAUNCH_SUPPLY_CURRENT_TIME_THRESHOLD = 0.1;
+        public static final boolean LAUNCH_ENABLE_SUPPLY_CURRENT_LIMIT = true;
+        public static final double LAUNCH_STATOR_CURRENT_LIMIT = 40;
+        public static final boolean LAUNCH_ENABLE_STATOR_CURRENT_LIMIT = true;
+
         public static final int    LAUNCH_PID_SLOT = 0;
         // The following PID constants (assigned here to SLOT0) are given in 
         // the standard Github CTRE VelocityClosedLoop example:
